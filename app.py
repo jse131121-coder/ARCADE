@@ -167,13 +167,14 @@ def register():
         except:
             st.error("Already exists")
 
-# ================= WRITE BUTTON =================
+# ================= WRITE STATE =================
 if "write_mode" not in st.session_state:
     st.session_state.write_mode = False
 
-if st.button("✏️ Write"):
-    st.session_state.write_mode = True
-
+# ================= WRITE BUTTON =================
+if not st.session_state.write_mode:
+    if st.button("✏️ Write"):
+        st.session_state.write_mode = True
 
 # ================= WRITE FORM =================
 if st.session_state.write_mode:
