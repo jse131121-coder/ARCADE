@@ -167,22 +167,45 @@ def register():
         except:
             st.error("Already exists")
 
-# ================= 글쓰기 =================
-def write_post():
-    st.subheader("Write")
-    t=st.text_input("Title")
-    ctt=st.text_area("Content")
-    cat=st.selectbox("Category",["피드","공지"])
-    notice=0
-    if st.session_state.user[4]=="admin":
-        notice=st.checkbox("공지 등록")
-    if st.button("Post"):
-        c.execute("""INSERT INTO posts(title,content,author_id,category,created_at,is_notice)
-                     VALUES(?,?,?,?,?,?)""",
-                  (t,ctt,st.session_state.user[0],cat,datetime.now(),notice))
-        conn.commit()
-        st.rerun()
+# ================= WRITE BUTTON =================
+if "write_mode" not in st.session_state:
+    st.session_state.write_mode = False
 
+if st.button("✏️ Write"):
+    st.session_state.write_mode = True
+
+
+# ================= WRITE FORM =================
+if st.session_state.write_mode:
+    st.markdown("### New Post")
+
+    title = st.text_input("Title")
+    content = st.text_area("Content")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Submit"):
+            if title and content:
+                posts = load_posts()
+
+                posts.insert(0, {
+                    "id": str(uuid.uuid4()),
+                    "title": title,
+                    "content": content,
+                    "date": datetime.now().strftime("%Y.%m.%d %H:%M")
+                })
+
+                save_posts(posts)
+
+                st.session_state.write_mode = False
+                st.success("Posted successfully!")
+                st.rerun()
+
+    with col2:
+        if st.button("Cancel"):
+            st.session_state.write_mode = False
+            st.rerun()
 # ================= 게시판 =================
 def list_posts():
     st.subheader("Feed")
