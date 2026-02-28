@@ -91,10 +91,10 @@ if "selected_post" not in st.session_state:
 
 # ================= SIDEBAR =================
 st.sidebar.markdown("## RODEWAY")
-menu = st.sidebar.radio("", ["피드", "공지"])
+menu = st.sidebar.radio("", ["FEED", "NOTICE"])
 
 if not st.session_state.write_mode:
-    if st.sidebar.button("＋ Write"):
+    if st.sidebar.button("🗒 Write"):
         st.session_state.write_mode = True
         st.rerun()
 
@@ -108,7 +108,7 @@ posts = load_posts()
 if st.session_state.write_mode:
     st.markdown("### New Post")
 
-    category = st.selectbox("Category", ["피드", "공지"])
+    category = st.selectbox("Category", ["FEED", "NOTICE"])
     title = st.text_input("Title")
     content = st.text_area("Content")
 
