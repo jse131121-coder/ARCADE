@@ -1,267 +1,164 @@
 import streamlit as st
-import sqlite3
+import json
 import os
-import hashlib
+import uuid
 from datetime import datetime
 
-# ================= 기본 설정 =================
-st.set_page_config(page_title="RODEWAY", layout="wide")
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# ================= BASIC =================
+st.set_page_config(page_title="RODEWAY", layout="centered")
 
-# ================= 🎨 DESIGN PACK =================
+DATA_FILE = "posts.json"
+
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w") as f:
+        json.dump([], f)
+
+def load_posts():
+    with open(DATA_FILE, "r") as f:
+        return json.load(f)
+
+def save_posts(posts):
+    with open(DATA_FILE, "w") as f:
+        json.dump(posts, f, indent=4)
+
+
+# ================= STYLE =================
 st.markdown("""
 <style>
-
-/* 배경 */
-[data-testid="stAppViewContainer"] {
-    background: linear-gradient(180deg, #eaf6ff 0%, #f6fbff 100%);
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+body {
+    background-color: #eaf6ff;
 }
-
-/* 헤더 숨김 */
-header {visibility: hidden;}
-
-/* 사이드바 */
-[data-testid="stSidebar"] {
-    background: #ffffffcc;
-    backdrop-filter: blur(15px);
-    border-right: 1px solid #e3f2fd;
-}
-
-/* 카드 */
-.card {
+.post-card {
     background: white;
     padding: 20px;
-    border-radius: 18px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-    margin-bottom: 20px;
-    transition: 0.25s ease;
+    border-radius: 20px;
+    margin-bottom: 15px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.05);
 }
-.card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 28px rgba(0,0,0,0.09);
-}
-
-/* 버튼 */
-.stButton>button {
-    background: #90CAF9;
-    color: #0d1b2a;
-    border-radius: 30px;
-    padding: 10px 22px;
-    border: none;
+.title {
+    font-size: 18px;
     font-weight: 600;
-    transition: 0.25s;
 }
-.stButton>button:hover {
-    background: #64B5F6;
-    transform: scale(1.05);
-}
-
-/* 입력창 */
-.stTextInput>div>div>input,
-.stTextArea textarea {
-    border-radius: 14px;
-    border: 1px solid #dceeff;
-    padding: 10px;
-}
-
-/* 댓글 */
-.comment-box {
-    background: #f3f9ff;
-    padding: 12px;
-    border-radius: 14px;
-    margin-bottom: 8px;
-    font-size: 14px;
-}
-
-/* 공지 배지 */
-.notice-badge {
-    background: #64B5F6;
-    color: white;
-    padding: 4px 10px;
-    border-radius: 12px;
+.meta {
     font-size: 12px;
-    display: inline-block;
-    margin-bottom: 6px;
+    color: gray;
 }
-
-h1,h2,h3 {font-weight:700;}
-
 </style>
 """, unsafe_allow_html=True)
 
-# ================= DB =================
-conn = sqlite3.connect("database.db", check_same_thread=False)
-c = conn.cursor()
 
-c.execute("""CREATE TABLE IF NOT EXISTS users(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-username TEXT UNIQUE,
-password TEXT,
-nickname TEXT,
-role TEXT DEFAULT 'user',
-points INTEGER DEFAULT 0,
-created_at TEXT)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS posts(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-title TEXT,
-content TEXT,
-author_id INTEGER,
-category TEXT,
-created_at TEXT,
-views INTEGER DEFAULT 0,
-likes INTEGER DEFAULT 0,
-is_notice INTEGER DEFAULT 0)""")
-
-c.execute("""CREATE TABLE IF NOT EXISTS comments(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
-post_id INTEGER,
-author_id INTEGER,
-content TEXT,
-created_at TEXT,
-likes INTEGER DEFAULT 0)""")
-
-conn.commit()
-
-# ================= 해시 =================
-def hash_pw(p): return hashlib.sha256(p.encode()).hexdigest()
-def check_pw(p,h): return hash_pw(p)==h
-
-# 관리자 자동 생성
-c.execute("SELECT * FROM users WHERE role='admin'")
-if not c.fetchone():
-    c.execute("INSERT INTO users(username,password,nickname,role,created_at) VALUES(?,?,?,?,?)",
-              ("admin",hash_pw("01024773752"),"RODEWAY_ADMIN","admin",datetime.now()))
-    conn.commit()
-
-if "user" not in st.session_state:
-    st.session_state.user=None
-
-# ================= 로그인 =================
-def login():
-    st.subheader("Login")
-    u=st.text_input("ID")
-    p=st.text_input("Password",type="password")
-    if st.button("Login"):
-        c.execute("SELECT * FROM users WHERE username=?",(u,))
-        user=c.fetchone()
-        if user and check_pw(p,user[2]):
-            st.session_state.user=user
-            st.rerun()
-        else:
-            st.error("Invalid")
-
-def register():
-    st.subheader("Register")
-    u=st.text_input("ID")
-    p=st.text_input("Password",type="password")
-    n=st.text_input("Nickname")
-    if st.button("Create"):
-        try:
-            c.execute("INSERT INTO users(username,password,nickname,created_at) VALUES(?,?,?,?)",
-                      (u,hash_pw(p),n,datetime.now()))
-            conn.commit()
-            st.success("Done")
-        except:
-            st.error("Already exists")
-
-# ================= WRITE STATE =================
+# ================= SESSION =================
 if "write_mode" not in st.session_state:
     st.session_state.write_mode = False
 
-# ================= WRITE BUTTON =================
-if not st.session_state.write_mode:
-    if st.button("✏️ Write"):
-        st.session_state.write_mode = True
+if "selected_post" not in st.session_state:
+    st.session_state.selected_post = None
 
-# ================= WRITE FORM =================
+
+# ================= SIDEBAR =================
+st.sidebar.title("RODEWAY")
+menu = st.sidebar.radio("Menu", ["피드", "공지"])
+
+if not st.session_state.write_mode:
+    if st.sidebar.button("✏️ Write"):
+        st.session_state.write_mode = True
+        st.rerun()
+
+
+# ================= TITLE =================
+st.title("RODEWAY")
+st.caption(menu)
+
+
+posts = load_posts()
+
+# ================= WRITE =================
 if st.session_state.write_mode:
     st.markdown("### New Post")
 
+    category = st.selectbox("Category", ["피드", "공지"])
     title = st.text_input("Title")
     content = st.text_area("Content")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("Submit"):
-            if title and content:
-                posts = load_posts()
-
-                posts.insert(0, {
-                    "id": str(uuid.uuid4()),
-                    "title": title,
-                    "content": content,
-                    "date": datetime.now().strftime("%Y.%m.%d %H:%M")
-                })
-
-                save_posts(posts)
-
-                st.session_state.write_mode = False
-                st.success("Posted successfully!")
-                st.rerun()
-
-    with col2:
-        if st.button("Cancel"):
+    if st.button("Submit"):
+        if title and content:
+            posts.insert(0, {
+                "id": str(uuid.uuid4()),
+                "category": category,
+                "title": title,
+                "content": content,
+                "date": datetime.now().strftime("%Y.%m.%d %H:%M"),
+                "likes": 0,
+                "comments": []
+            })
+            save_posts(posts)
             st.session_state.write_mode = False
             st.rerun()
-# ================= 게시판 =================
-def list_posts():
-    st.subheader("Feed")
-    c.execute("SELECT * FROM posts ORDER BY is_notice DESC, id DESC")
-    posts=c.fetchall()
-    for p in posts:
-        st.markdown(f"""
-        <div class="card">
-            {"<div class='notice-badge'>NOTICE</div>" if p[8]==1 else ""}
-            <h3>{p[1]}</h3>
-            <p style='color:gray;font-size:13px;'>조회 {p[6]} · 👍 {p[7]}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Open",key=p[0]):
-            view_post(p[0])
 
-def view_post(pid):
-    c.execute("UPDATE posts SET views=views+1 WHERE id=?",(pid,))
-    conn.commit()
-    c.execute("SELECT * FROM posts WHERE id=?",(pid,))
-    p=c.fetchone()
-    st.markdown(f"<div class='card'><h2>{p[1]}</h2><p>{p[2]}</p></div>",unsafe_allow_html=True)
-
-    if st.button("👍"):
-        c.execute("UPDATE posts SET likes=likes+1 WHERE id=?",(pid,))
-        conn.commit()
+    if st.button("Cancel"):
+        st.session_state.write_mode = False
         st.rerun()
 
-    st.subheader("Comments")
-    cm=st.text_input("Write comment")
-    if st.button("Send"):
-        c.execute("INSERT INTO comments(post_id,author_id,content,created_at) VALUES(?,?,?,?)",
-                  (pid,st.session_state.user[0],cm,datetime.now()))
-        conn.commit()
-        st.rerun()
+    st.markdown("---")
 
-    c.execute("SELECT * FROM comments WHERE post_id=?",(pid,))
-    for com in c.fetchall():
+
+# ================= LIST =================
+filtered = [p for p in posts if p["category"] == menu]
+
+if menu == "공지":
+    filtered = sorted(filtered, key=lambda x: x["date"], reverse=True)
+
+if not filtered:
+    st.info("게시글이 없습니다.")
+
+for post in filtered:
+    with st.container():
         st.markdown(f"""
-        <div class="comment-box">
-        {com[3]} 👍 {com[5]}
+        <div class="post-card">
+            <div class="title">{post['title']}</div>
+            <div class="meta">{post['date']} · ❤️ {post['likes']}</div>
+            <hr>
+            <div>{post['content'][:100]}...</div>
         </div>
         """, unsafe_allow_html=True)
 
-# ================= MAIN =================
-st.title("🌊 RODEWAY")
+        col1, col2, col3 = st.columns([1,1,3])
 
-if st.session_state.user:
-    st.sidebar.write(st.session_state.user[3])
-    if st.sidebar.button("Feed"): list_posts()
-    if st.sidebar.button("Write"): write_post()
-    if st.sidebar.button("Logout"):
-        st.session_state.user=None
-        st.rerun()
-else:
-    m=st.sidebar.selectbox("Menu",["Login","Register"])
-    if m=="Login": login()
-    else: register()
+        with col1:
+            if st.button("❤️", key="like"+post["id"]):
+                post["likes"] += 1
+                save_posts(posts)
+                st.rerun()
+
+        with col2:
+            if st.button("보기", key="view"+post["id"]):
+                st.session_state.selected_post = post["id"]
+                st.rerun()
+
+
+# ================= DETAIL =================
+if st.session_state.selected_post:
+    post = next((p for p in posts if p["id"] == st.session_state.selected_post), None)
+
+    if post:
+        st.markdown("## 상세 보기")
+        st.markdown(f"### {post['title']}")
+        st.caption(f"{post['date']} · ❤️ {post['likes']}")
+        st.write(post["content"])
+
+        st.markdown("### 댓글")
+
+        for c in post["comments"]:
+            st.write(f"- {c}")
+
+        new_comment = st.text_input("댓글 입력", key="comment_input")
+
+        if st.button("댓글 등록"):
+            if new_comment:
+                post["comments"].append(new_comment)
+                save_posts(posts)
+                st.rerun()
+
+        if st.button("닫기"):
+            st.session_state.selected_post = None
+            st.rerun()
